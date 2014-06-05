@@ -1,0 +1,7 @@
+Usage
+
+1. Download and install jME SDK 3 : http://hub.jmonkeyengine.org/downloads/
+2. Open the project contained in this repository
+3. To indicate where your android SDK is, right click on the project, go to Properties, under Application/Android click "Run Android Target Configuration Utility"
+4. Build (android and native) using the hammer icon
+5. Run the desktop application with "<default confid>", the android one with "Android Device"
