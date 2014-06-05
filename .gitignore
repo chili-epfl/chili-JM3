@@ -2,3 +2,9 @@
 dist
 build
 nbproject/private/
+mobile/local.properties
+mobile/bin/
+mobile/gen/
+mobile/private
+mobile/libs/
+mobile/assets/

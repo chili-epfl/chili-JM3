@@ -16,10 +16,7 @@ import com.jme3.scene.Geometry;
 import com.jme3.scene.Node;
 import com.jme3.scene.shape.Box;
 import com.jme3.scene.shape.Line;
-import org.lwjgl.opengl.Display;
-import org.opencv.core.Core;
-import org.opencv.core.Mat;
-import org.opencv.highgui.VideoCapture;
+
 
 /**
  * test
@@ -28,24 +25,29 @@ import org.opencv.highgui.VideoCapture;
  */
 public class Main extends SimpleApplication {
 
-    static {
-        System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
-
-
-    }
     int WS_WIDTH = 640;
     int WS_HEIGHT = 480;
+    
+    public CamStream camStream;
+    
+    public static boolean isDesktop = true;
 
     public static void main(String[] args) {
         Main app = new Main();
         app.start();
     }
-    private Chilitags3D chilitags;
-    private VideoCapture video;
+    private Chilitags3D chilitags;                                      
+
     private Geometry geom;
 
     @Override
     public void simpleInitApp() {
+        if (isDesktop) {
+            this.camStream = new DesktopCamStream();
+        }
+        this.stateManager.attach(camStream);
+        this.camStream.setEnabled(true);
+        
         initCameras();
         initChilitags();
 
@@ -73,7 +75,7 @@ public class Main extends SimpleApplication {
         // Setup Top view
         Camera cam2 = cam.clone();
         cam2.setViewPort(0f, 0.5f, 0f, 0.5f);
-        float aspect = (float) Display.getWidth() / Display.getHeight();
+        float aspect = 1.33f;
         float invZoom = 50f;
         cam2.setParallelProjection(true);
         cam2.setFrustum(0, 1000, -invZoom * aspect, invZoom * aspect, invZoom, -invZoom);
@@ -117,15 +119,15 @@ public class Main extends SimpleApplication {
         view4.setBackgroundColor(ColorRGBA.LightGray);
         view4.setClearFlags(true, true, true);
         view4.attachScene(rootNode);
-
-
-
-
     }
 
+    //TODO move to a Chilitag class (AppState ?)
     public void initChilitags() {
-        chilitags = new Chilitags3D(640, 480, 640, 480, Chilitags3D.InputType.RGB888);
-        chilitags.setPerformancePreset(Chilitags3D.PerformancePreset.ROBUST);
+        chilitags = new Chilitags3D(640, 480, 640, 480,
+                isDesktop
+                ?Chilitags3D.InputType.RGB888
+                :Chilitags3D.InputType.YUV_NV21);
+        chilitags.setPerformancePreset(Chilitags3D.PerformancePreset.FAST);
         //Fake matrix
         double[] cc = {
             270, 0, 640 / 2,
@@ -133,13 +135,6 @@ public class Main extends SimpleApplication {
             0, 0, 1};
         double[] dc = {};
         chilitags.setCalibration(cc, dc);
-        video = new VideoCapture(0);
-        if (!video.isOpened()) {
-            System.err.println("No Camera");
-        }
-        /*Set image size to 640x480*/
-        video.set(3, 640);
-        video.set(4, 480);
     }
 
     @Override
@@ -174,49 +169,18 @@ public class Main extends SimpleApplication {
 
 
         rootNode.attachChild(grid);
-
-
-
     }
 
+    @Override
     public void simpleUpdate(float tpf) {
         // make the cube rotate:
-        Mat img = new Mat();
-        video.read(img);
-        byte[] return_buff = new byte[(int) (img.total()
-                * img.channels())];
-        img.get(0, 0, return_buff);
-        ObjectTransform[] tags = chilitags.estimate(return_buff);
-        Matrix3f wsRot = null;
-        Vector3f wsTrans = null;
-        /*tag 1023 defines my workspace plane*/
-        for (int i = 0; i < tags.length; i++) {
-            if (tags[i].name.contains("1023")) {
-                Matrix4f m = new Matrix4f(
-                        (float) tags[i].transform[0][0], (float) tags[i].transform[0][1],
-                        (float) tags[i].transform[0][2], (float) tags[i].transform[0][3],
-                        (float) tags[i].transform[1][0], (float) tags[i].transform[1][1],
-                        (float) tags[i].transform[1][2], (float) tags[i].transform[1][3],
-                        (float) tags[i].transform[2][0], (float) tags[i].transform[2][1],
-                        (float) tags[i].transform[2][2], (float) tags[i].transform[2][3],
-                        (float) tags[i].transform[3][0], (float) tags[i].transform[3][1],
-                        (float) tags[i].transform[3][2], (float) tags[i].transform[3][3]);
-
-                /*TODO: check products! */
-                Matrix3f m1 = new Matrix3f(1, 0, 0, 0, 0, 1, 0, 1, 0);
-                Vector3f tran = m.toTranslationVector();
-                Matrix3f rot = m.toRotationMatrix();
-                wsRot = m1.invert().mult(rot.clone().mult(m1));
-                wsTrans = m.toTranslationVector();
-                wsTrans.y = wsTrans.z;
-                wsTrans.z = tran.y;
-                break;
-            }
-        }
-        if (wsRot != null) {
-
+        if (camStream.isEnabled()) {
+            ObjectTransform[] tags = chilitags.estimate(camStream.getImageData());
+            Matrix3f wsRot = null;
+            Vector3f wsTrans = null;
+            /*tag 1023 defines my workspace plane*/
             for (int i = 0; i < tags.length; i++) {
-                if (!tags[i].name.contains("1023")) {
+                if (tags[i].name.contains("1023")) {
                     Matrix4f m = new Matrix4f(
                             (float) tags[i].transform[0][0], (float) tags[i].transform[0][1],
                             (float) tags[i].transform[0][2], (float) tags[i].transform[0][3],
@@ -226,13 +190,39 @@ public class Main extends SimpleApplication {
                             (float) tags[i].transform[2][2], (float) tags[i].transform[2][3],
                             (float) tags[i].transform[3][0], (float) tags[i].transform[3][1],
                             (float) tags[i].transform[3][2], (float) tags[i].transform[3][3]);
+
+                    /*TODO: check products! */
                     Matrix3f m1 = new Matrix3f(1, 0, 0, 0, 0, 1, 0, 1, 0);
                     Vector3f tran = m.toTranslationVector();
                     Matrix3f rot = m.toRotationMatrix();
-
-                    Matrix3f temp = wsRot.invert().mult(m1.invert().mult(rot).mult(m1));
-                    geom.setLocalRotation(temp);
+                    wsRot = m1.invert().mult(rot.clone().mult(m1));
+                    wsTrans = m.toTranslationVector();
+                    wsTrans.y = wsTrans.z;
+                    wsTrans.z = tran.y;
                     break;
+                }
+            }
+            if (wsRot != null) {
+
+                for (int i = 0; i < tags.length; i++) {
+                    if (!tags[i].name.contains("1023")) {
+                        Matrix4f m = new Matrix4f(
+                                (float) tags[i].transform[0][0], (float) tags[i].transform[0][1],
+                                (float) tags[i].transform[0][2], (float) tags[i].transform[0][3],
+                                (float) tags[i].transform[1][0], (float) tags[i].transform[1][1],
+                                (float) tags[i].transform[1][2], (float) tags[i].transform[1][3],
+                                (float) tags[i].transform[2][0], (float) tags[i].transform[2][1],
+                                (float) tags[i].transform[2][2], (float) tags[i].transform[2][3],
+                                (float) tags[i].transform[3][0], (float) tags[i].transform[3][1],
+                                (float) tags[i].transform[3][2], (float) tags[i].transform[3][3]);
+                        Matrix3f m1 = new Matrix3f(1, 0, 0, 0, 0, 1, 0, 1, 0);
+                        Vector3f tran = m.toTranslationVector();
+                        Matrix3f rot = m.toRotationMatrix();
+
+                        Matrix3f temp = wsRot.invert().mult(m1.invert().mult(rot).mult(m1));
+                        geom.setLocalRotation(temp);
+                        break;
+                    }
                 }
             }
         }
