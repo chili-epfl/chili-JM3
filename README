@@ -5,3 +5,4 @@ Usage
 3. To indicate where your android SDK is, right click on the project, go to Properties, under Application/Android click "Run Android Target Configuration Utility"
 4. Build (android and native) using the hammer icon
 5. Run the desktop application with "<default confid>", the android one with "Android Device"
+6. You need tag #1023 and another to see something happen: 1023 is the reference, any other tag moves the object.
