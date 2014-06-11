@@ -55,11 +55,17 @@ public class MainActivity extends AndroidHarness {
     @Override
     public void layoutDisplay() {
         super.layoutDisplay();
+        
+        // This crashes if it happens earlier in the application life cycle
         surfaceView = new SurfaceView(this);
         surfaceView.getHolder().addCallback(camStream);
+        
+        // Hack into the root view's layout and overlay the SurfaceView
         FrameLayout fl = (FrameLayout) getWindow().getDecorView().findViewById(android.R.id.content);
         fl.addView(surfaceView);
         fl.bringChildToFront(surfaceView);
+        
+        // Resize and place the SurfaceView on the bottom right.
         FrameLayout.LayoutParams layoutParams = (FrameLayout.LayoutParams) surfaceView.getLayoutParams();
         layoutParams.width = 160;
         layoutParams.height = 120;
