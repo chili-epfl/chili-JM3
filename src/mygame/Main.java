@@ -5,18 +5,20 @@ import ch.epfl.chili.chilitags.ObjectTransform;
 import com.jme3.app.FlyCamAppState;
 import com.jme3.app.SimpleApplication;
 import com.jme3.material.Material;
+import com.jme3.material.RenderState.FaceCullMode;
 import com.jme3.math.ColorRGBA;
-import com.jme3.math.Matrix3f;
 import com.jme3.math.Matrix4f;
+import com.jme3.math.Transform;
 import com.jme3.math.Vector3f;
-import com.jme3.renderer.Camera;
-import com.jme3.renderer.RenderManager;
-import com.jme3.renderer.ViewPort;
 import com.jme3.scene.Geometry;
 import com.jme3.scene.Node;
-import com.jme3.scene.shape.Box;
 import com.jme3.scene.shape.Line;
-
+import com.jme3.scene.shape.Quad;
+import java.io.PrintStream;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * test
@@ -25,20 +27,38 @@ import com.jme3.scene.shape.Line;
  */
 public class Main extends SimpleApplication {
 
-    int WS_WIDTH = 640;
-    int WS_HEIGHT = 480;
-    
-    public CamStream camStream;
-    
     public static boolean isDesktop = true;
+    public CamStream camStream;
+    private Chilitags3D chilitags; //TODO move to a Chilitag AppState ?
+    private HashMap<String, Matrix4f> config = new HashMap<String, Matrix4f>();
 
     public static void main(String[] args) {
         Main app = new Main();
         app.start();
     }
-    private Chilitags3D chilitags;                                      
 
-    private Geometry geom;
+    public Main() {
+        setDisplayStatView(false);
+    }
+
+    // FIXME
+    private static Matrix4f computeLocalCoords(Matrix4f knownLocal, Matrix4f known, Matrix4f toAdd) {
+        return knownLocal.invert()
+                .mult(known.invert())
+                .mult(toAdd);
+    }
+
+    public static Matrix4f toMatrix4f(ObjectTransform ot) {
+        return new Matrix4f(
+                (float) ot.transform[0][0], (float) ot.transform[0][1],
+                (float) ot.transform[0][2], (float) ot.transform[0][3],
+                (float) ot.transform[1][0], (float) ot.transform[1][1],
+                (float) ot.transform[1][2], (float) ot.transform[1][3],
+                (float) ot.transform[2][0], (float) ot.transform[2][1],
+                (float) ot.transform[2][2], (float) ot.transform[2][3],
+                (float) ot.transform[3][0], (float) ot.transform[3][1],
+                (float) ot.transform[3][2], (float) ot.transform[3][3]);
+    }
 
     @Override
     public void simpleInitApp() {
@@ -47,102 +67,43 @@ public class Main extends SimpleApplication {
         }
         this.stateManager.attach(camStream);
         this.camStream.setEnabled(true);
-        
-        initCameras();
-        initChilitags();
 
-        createGrid();
-
-        Box b = new Box(20, 20, 20);
-        geom = new Geometry("Box", b);
-
-        Material mat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
-        mat.setColor("Color", ColorRGBA.Blue);
-        geom.setMaterial(mat);
-
-        rootNode.attachChild(geom);
-    }
-
-    public void initCameras() {
-        // Setup Perspective view
-        cam.setViewPort(.5f, 1f, 0f, 0.5f);
-        cam.setFrustum(1f, 1000f, -1f, 1f, 1f, -1f);
-        cam.update();
-        cam.setLocation(new Vector3f(0, 100, 100));
+        cam.setLocation(new Vector3f(0, 0, -100));
         cam.lookAt(new Vector3f(0, 0, 0), Vector3f.UNIT_Y);
-        viewPort.setBackgroundColor(ColorRGBA.LightGray);
+        stateManager.getState(FlyCamAppState.class).getCamera().setMoveSpeed(100.0f);
 
-        // Setup Top view
-        Camera cam2 = cam.clone();
-        cam2.setViewPort(0f, 0.5f, 0f, 0.5f);
-        float aspect = 1.33f;
-        float invZoom = 50f;
-        cam2.setParallelProjection(true);
-        cam2.setFrustum(0, 1000, -invZoom * aspect, invZoom * aspect, invZoom, -invZoom);
-        cam2.update();
-
-        cam2.setLocation(new Vector3f(0, 100, 0));
-        cam2.lookAt(new Vector3f(0, 0, 0), Vector3f.UNIT_Y);
-
-        ViewPort view2 = renderManager.createMainView("Bottom Left", cam2);
-        view2.setBackgroundColor(ColorRGBA.LightGray);
-        view2.setClearFlags(true, true, true);
-        view2.attachScene(rootNode);
-
-        // Setup Front view
-        Camera cam3 = cam.clone();
-        cam3.setViewPort(0f, .5f, .5f, 1f);
-        cam3.setParallelProjection(true);
-        cam3.setFrustum(0, 1000, -invZoom * aspect, invZoom * aspect, invZoom, -invZoom);
-        cam3.update();
-
-        cam3.setLocation(new Vector3f(0, 0, 100));
-        cam3.lookAt(new Vector3f(0, 0, 0), Vector3f.UNIT_Y);
-
-
-        ViewPort view3 = renderManager.createMainView("Top Left", cam3);
-        view3.setBackgroundColor(ColorRGBA.LightGray);
-        view3.setClearFlags(true, true, true);
-        view3.attachScene(rootNode);
-
-        // Setup Side view
-        Camera cam4 = cam.clone();
-        cam4.setViewPort(.5f, 1f, .5f, 1f);
-        cam4.setParallelProjection(true);
-        cam4.setFrustum(0, 1000, -invZoom * aspect, invZoom * aspect, invZoom, -invZoom);
-        cam4.update();
-
-        cam4.setLocation(new Vector3f(-100, 0, 0));
-        cam4.lookAt(new Vector3f(0, 0, 0), Vector3f.UNIT_Y);
-
-        ViewPort view4 = renderManager.createMainView("Top Right", cam4);
-        view4.setBackgroundColor(ColorRGBA.LightGray);
-        view4.setClearFlags(true, true, true);
-        view4.attachScene(rootNode);
-    }
-
-    //TODO move to a Chilitag class (AppState ?)
-    public void initChilitags() {
         chilitags = new Chilitags3D(640, 480, 640, 480,
                 isDesktop
-                ?Chilitags3D.InputType.RGB888
-                :Chilitags3D.InputType.YUV_NV21);
-        chilitags.setPerformancePreset(Chilitags3D.PerformancePreset.FAST);
-        //Fake matrix
-        double[] cc = {
-            270, 0, 640 / 2,
-            0, 270, 480 / 2,
-            0, 0, 1};
-        double[] dc = {};
-        chilitags.setCalibration(cc, dc);
+                ? Chilitags3D.InputType.RGB888
+                : Chilitags3D.InputType.YUV_NV21);
+
+        createGrid();
     }
 
-    @Override
-    public void simpleRender(RenderManager rm) {
-        //TODO: add render code
+    // TODO move to a control
+    private void setTagGeometry(String name, Matrix4f transform) {
+        Geometry geometry = (Geometry) rootNode.getChild(name);
+        if (geometry == null) {
+            geometry = new Geometry(name, new Quad(20.f, 20.f));
+
+            Material mat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
+            mat.setColor("Color", name.contains("config") ? ColorRGBA.Blue : ColorRGBA.Red);
+            mat.getAdditionalRenderState().setFaceCullMode(FaceCullMode.Off);
+            geometry.setMaterial(mat);
+
+            rootNode.attachChild(geometry);
+        }
+
+        geometry.setLocalTransform(new Transform(
+                transform.toTranslationVector(),
+                transform.toRotationQuat(),
+                transform.toScaleVector()));
     }
 
     public void createGrid() {
+        int WS_WIDTH = 640;
+        int WS_HEIGHT = 480;
+
         Node grid = new Node("Grid");
 
         for (int i = -WS_WIDTH / 2; i < WS_WIDTH / 2; i += 20) {
@@ -167,7 +128,6 @@ public class Main extends SimpleApplication {
             grid.attachChild(line_geom);
         }
 
-
         rootNode.attachChild(grid);
     }
 
@@ -176,60 +136,57 @@ public class Main extends SimpleApplication {
         // make the cube rotate:
         if (camStream.isEnabled()) {
             ObjectTransform[] tags = chilitags.estimate(camStream.getImageData());
-            Matrix3f wsRot = null;
-            Vector3f wsTrans = null;
-            /*tag 1023 defines my workspace plane*/
-            for (int i = 0; i < tags.length; i++) {
-                if (tags[i].name.contains("1023")) {
-                    Matrix4f m = new Matrix4f(
-                            (float) tags[i].transform[0][0], (float) tags[i].transform[0][1],
-                            (float) tags[i].transform[0][2], (float) tags[i].transform[0][3],
-                            (float) tags[i].transform[1][0], (float) tags[i].transform[1][1],
-                            (float) tags[i].transform[1][2], (float) tags[i].transform[1][3],
-                            (float) tags[i].transform[2][0], (float) tags[i].transform[2][1],
-                            (float) tags[i].transform[2][2], (float) tags[i].transform[2][3],
-                            (float) tags[i].transform[3][0], (float) tags[i].transform[3][1],
-                            (float) tags[i].transform[3][2], (float) tags[i].transform[3][3]);
-
-                    /*TODO: check products! */
-                    Matrix3f m1 = new Matrix3f(1, 0, 0, 0, 0, 1, 0, 1, 0);
-                    Vector3f tran = m.toTranslationVector();
-                    Matrix3f rot = m.toRotationMatrix();
-                    wsRot = m1.invert().mult(rot.clone().mult(m1));
-                    wsTrans = m.toTranslationVector();
-                    wsTrans.y = wsTrans.z;
-                    wsTrans.z = tran.y;
-                    break;
+            if (tags.length > 0) {
+                if (config.isEmpty()) {
+                    ObjectTransform firstTag = tags[0];
+                    config.put(firstTag.name, Matrix4f.IDENTITY);
+                    setTagGeometry(firstTag.name, toMatrix4f(firstTag));
+                    setTagGeometry(firstTag.name + "config", Matrix4f.IDENTITY);
                 }
-            }
-            if (wsRot != null) {
 
-                for (int i = 0; i < tags.length; i++) {
-                    if (!tags[i].name.contains("1023")) {
-                        Matrix4f m = new Matrix4f(
-                                (float) tags[i].transform[0][0], (float) tags[i].transform[0][1],
-                                (float) tags[i].transform[0][2], (float) tags[i].transform[0][3],
-                                (float) tags[i].transform[1][0], (float) tags[i].transform[1][1],
-                                (float) tags[i].transform[1][2], (float) tags[i].transform[1][3],
-                                (float) tags[i].transform[2][0], (float) tags[i].transform[2][1],
-                                (float) tags[i].transform[2][2], (float) tags[i].transform[2][3],
-                                (float) tags[i].transform[3][0], (float) tags[i].transform[3][1],
-                                (float) tags[i].transform[3][2], (float) tags[i].transform[3][3]);
-                        Matrix3f m1 = new Matrix3f(1, 0, 0, 0, 0, 1, 0, 1, 0);
-                        Vector3f tran = m.toTranslationVector();
-                        Matrix3f rot = m.toRotationMatrix();
+                ObjectTransform knownTag = null;
+                LinkedList<ObjectTransform> tagsToAdd = new LinkedList<ObjectTransform>();
+                for (ObjectTransform tag : tags) {
+                    if (config.containsKey(tag.name)) {
+                        knownTag = tag;
+                    } else {
+                        tagsToAdd.add(tag);
+                    }
+                    setTagGeometry(tag.name, toMatrix4f(tag));
+                }
 
-                        Matrix3f temp = wsRot.invert().mult(m1.invert().mult(rot).mult(m1));
-                        geom.setLocalRotation(temp);
-                        break;
+                if (knownTag != null) {
+                    for (ObjectTransform tag : tagsToAdd) {
+                        Matrix4f localCoordinates = computeLocalCoords(
+                                config.get(knownTag.name),
+                                toMatrix4f(knownTag),
+                                toMatrix4f(tag));
+                        setTagGeometry(tag.name + "config", localCoordinates);
+                        config.put(tag.name, localCoordinates);
+                        printConfig(System.out);
                     }
                 }
             }
         }
     }
 
-    public Main() {
-        setDisplayStatView(false);
-        stateManager.detach(stateManager.getState(FlyCamAppState.class));
+    private void printConfig(PrintStream out) {
+        out.println("myobject:");
+        Pattern tagIdPattern = Pattern.compile("\\d+");
+        for (String t : config.keySet()) {
+            Matcher matcher = tagIdPattern.matcher(t);
+            matcher.find();
+            out.println("    - tag:" + matcher.group());
+
+            Matrix4f transform = config.get(t);
+
+            float[] angles = transform.toRotationQuat().toAngles(null);
+            out.println(String.format("      rotation: [%f, %f, %f]",
+                    angles[0], angles[1], angles[2]));
+
+            Vector3f translation = transform.toTranslationVector();
+            out.println(String.format("      translation: [%f, %f, %f]",
+                    translation.x, translation.y, translation.z));
+        }
     }
 }
